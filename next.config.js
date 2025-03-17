@@ -21,9 +21,9 @@ const nextConfig = {
     },
   }),
   // Rewrites don't work with static export, but we'll keep this
-  // for development mode
+  // for development mode and Vercel
   async rewrites() {
-    if (process.env.NODE_ENV === 'development') {
+    if (process.env.NODE_ENV === 'development' || process.env.VERCEL === '1') {
       return [
         {
           source: '/api/sofascore/:path*',

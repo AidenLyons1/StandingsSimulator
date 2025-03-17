@@ -4,13 +4,14 @@ import { Team, Match } from './simulator';
 function getApiUrl() {
   // Check if we're in Node.js (server-side rendering or build time)
   if (typeof window === 'undefined') {
-    return '/api/sofascore';
+    return 'https://corsproxy.io/?https://api.sofascore.com';
   }
   
   // Check if we're in a browser and on the production domain
   if (window.location.hostname === 'aidenlyons.com' || 
-      window.location.hostname.includes('github.io')) {
-    // Use CORS proxy in production
+      window.location.hostname.includes('github.io') ||
+      window.location.hostname.includes('vercel.app')) {
+    // Use CORS proxy in production and on Vercel
     return 'https://corsproxy.io/?https://api.sofascore.com';
   }
   
