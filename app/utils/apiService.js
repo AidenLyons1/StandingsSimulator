@@ -22,8 +22,12 @@ function getApiUrl() {
 // Function to fetch Scottish Championship standings from Sofascore API
 export async function fetchScottishChampionshipData() {
   try {
+    // Updated tournament and season IDs for Scottish Championship 2023-24
+    const tournamentId = '206'; // Scottish Championship tournament ID
+    const seasonId = '66513';   // Updated to 2023-24 season ID
+    
     // Fetch standings
-    const standingsResponse = await fetch(`${getApiUrl()}/api/v1/unique-tournament/206/season/62411/standings/total`, {
+    const standingsResponse = await fetch(`${getApiUrl()}/api/v1/unique-tournament/${tournamentId}/season/${seasonId}/standings/total`, {
       headers: {
         'Accept': 'application/json',
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
@@ -39,8 +43,8 @@ export async function fetchScottishChampionshipData() {
     // Parse teams data first
     const teams = parseTeamsData(standingsData);
     
-    // Fetch upcoming matches
-    const matchesData = await fetchUpcomingMatches('206', '62411');
+    // Fetch upcoming matches with updated IDs
+    const matchesData = await fetchUpcomingMatches(tournamentId, seasonId);
     
     // Parse matches data
     const matches = parseUpcomingMatches(matchesData, teams);
@@ -60,8 +64,12 @@ export async function fetchScottishChampionshipData() {
 // Function to fetch English Premier League standings from Sofascore API
 export async function fetchEnglishPremierLeagueData() {
   try {
+    // Updated tournament and season IDs for English Premier League 2023-24
+    const tournamentId = '17';  // EPL tournament ID
+    const seasonId = '66879';   // Updated to 2023-24 season ID
+    
     // Fetch standings
-    const standingsResponse = await fetch(`${getApiUrl()}/api/v1/unique-tournament/17/season/61627/standings/total`, {
+    const standingsResponse = await fetch(`${getApiUrl()}/api/v1/unique-tournament/${tournamentId}/season/${seasonId}/standings/total`, {
       headers: {
         'Accept': 'application/json',
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
@@ -77,8 +85,8 @@ export async function fetchEnglishPremierLeagueData() {
     // Parse teams data first
     const teams = parseTeamsData(standingsData);
     
-    // Fetch upcoming matches
-    const matchesData = await fetchUpcomingMatches('17', '61627');
+    // Fetch upcoming matches with updated IDs
+    const matchesData = await fetchUpcomingMatches(tournamentId, seasonId);
     
     // Parse matches data
     const matches = parseUpcomingMatches(matchesData, teams);
