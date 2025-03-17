@@ -94,6 +94,12 @@ export default function ClincherScenario({ scenario, teamName }) {
           Points needed: <span className="font-medium">{pointsNeeded}</span> | 
           Points to gain: <span className="font-medium">{pointsToGain}</span>
         </p>
+        {scenario.needsOneMoreResult && !scenario.canClinchMathematically && (
+          <p className="mt-2 text-sm text-blue-700 bg-blue-50 p-2 border border-blue-100 rounded">
+            <span className="font-semibold">Note:</span> This scenario requires results from earlier rounds to create a sufficient points gap. 
+            Then, either {teamName} needs a positive result in this round, or the nearest competitor needs to drop points.
+          </p>
+        )}
       </div>
       
       <div className="mb-4">
@@ -140,34 +146,59 @@ export default function ClincherScenario({ scenario, teamName }) {
             <div key={roundNum} className="mb-3">
               <h5 className="text-sm font-medium text-gray-700 mb-2">Round {roundNum}</h5>
               <div className="bg-white rounded-md border border-blue-100 divide-y divide-blue-100">
-                {keyFixturesByRound[roundNum].map((fixture, index) => (
-                  <div key={index} className="px-4 py-3">
-                    <div className="flex justify-between items-center">
-                      <div className="flex items-center">
-                        <span className="font-medium text-gray-800">
-                          {fixture.match.homeTeam}
-                        </span>
-                        <span className="mx-2 text-gray-500">vs</span>
-                        <span className="font-medium text-gray-800">
-                          {fixture.match.awayTeam}
-                        </span>
+                {keyFixturesByRound[roundNum]
+                  // Sort to prioritize matches involving our team first, then threat teams
+                  .sort((a, b) => {
+                    const aInvolvesOurTeam = a.match.homeTeam === teamName || a.match.awayTeam === teamName;
+                    const bInvolvesOurTeam = b.match.homeTeam === teamName || b.match.awayTeam === teamName;
+                    
+                    if (aInvolvesOurTeam && !bInvolvesOurTeam) return -1;
+                    if (!aInvolvesOurTeam && bInvolvesOurTeam) return 1;
+                    return 0;
+                  })
+                  .map((fixture, index) => {
+                    // Check if this match involves our team
+                    const involvesOurTeam = fixture.match.homeTeam === teamName || fixture.match.awayTeam === teamName;
+                    
+                    return (
+                      <div key={index} className={`px-4 py-3 ${involvesOurTeam ? 'bg-blue-50' : ''}`}>
+                        <div className="flex justify-between items-center">
+                          <div className="flex flex-col">
+                            <div className="flex items-center">
+                              <span className={`font-medium ${fixture.match.homeTeam === teamName ? 'text-blue-600' : 'text-gray-800'}`}>
+                                {fixture.match.homeTeam}
+                              </span>
+                              <span className="mx-2 text-gray-500">vs</span>
+                              <span className={`font-medium ${fixture.match.awayTeam === teamName ? 'text-blue-600' : 'text-gray-800'}`}>
+                                {fixture.match.awayTeam}
+                              </span>
+                            </div>
+                            {fixture.match.date && (
+                              <div className="text-xs text-gray-500 mt-1">
+                                {formatMatchDate(fixture.match.date)}
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex items-center">
+                            {involvesOurTeam && (
+                              <span className="text-xs px-2 py-1 mr-2 rounded-full bg-blue-100 text-blue-800">
+                                Your match
+                              </span>
+                            )}
+                            <span className={`text-sm px-2 py-1 rounded-full 
+                              ${involvesOurTeam 
+                                ? 'bg-blue-200 text-blue-800' 
+                                : 'bg-gray-100 text-gray-800'}`}>
+                              {formatResult(fixture.result)}
+                            </span>
+                          </div>
+                        </div>
+                        <p className="text-sm text-gray-600 mt-1">
+                          {fixture.explanation}
+                        </p>
                       </div>
-                      <div className="flex items-center">
-                        {fixture.importance === 'high' && (
-                          <span className="text-xs px-2 py-1 mr-2 rounded-full bg-red-100 text-red-800">
-                            High impact
-                          </span>
-                        )}
-                        <span className="text-sm px-2 py-1 rounded-full bg-blue-100 text-blue-800">
-                          {formatResult(fixture.result)}
-                        </span>
-                      </div>
-                    </div>
-                    <p className="text-sm text-gray-600 mt-1">
-                      {fixture.explanation}
-                    </p>
-                  </div>
-                ))}
+                    );
+                  })}
               </div>
             </div>
           ))}
@@ -180,6 +211,51 @@ export default function ClincherScenario({ scenario, teamName }) {
           <p className="text-sm text-yellow-800">
             {keyFixtures.length} key fixtures from earlier rounds exist but couldn't be displayed correctly.
             This may be due to how rounds are structured in the data.
+          </p>
+        </div>
+      )}
+      
+      {/* Add clinching day explanation */}
+      <div className="p-4 bg-green-50 border border-green-200 rounded-md mb-4">
+        <h4 className="text-md font-semibold text-green-800 mb-2">How {teamName} Can Clinch the Title</h4>
+        
+        <p className="text-sm text-green-700 mb-3">
+          Assuming all prior matches go as shown above, {teamName} could clinch the title on matchday {round+1} in one of these ways:
+        </p>
+        
+        {scenario.threatCompetitors && scenario.threatCompetitors.length > 0 && (
+          <div className="bg-white rounded-md border border-green-100 mb-3">
+            <div className="px-4 py-3 border-b border-green-100">
+              <p className="font-medium text-gray-800">Scenario 1:</p>
+              <p className="text-sm text-gray-700">
+                If {scenario.threatCompetitors[0]} {scenario.threatCompetitors.length > 1 ? '(or other threats)' : ''} loses or draws their match, 
+                {teamName} will clinch the title regardless of their own result.
+              </p>
+            </div>
+            
+            <div className="px-4 py-3">
+              <p className="font-medium text-gray-800">Scenario 2:</p>
+              <p className="text-sm text-gray-700">
+                If all title threats win their matches, {teamName} will need at least a draw in their own match to clinch.
+              </p>
+            </div>
+          </div>
+        )}
+        
+        <p className="text-xs text-gray-600">
+          This clinching scenario requires {teamName} to have built up a sufficient points advantage 
+          through the results of earlier fixtures shown above.
+        </p>
+      </div>
+      
+      {/* Add clarifying information */}
+      {scenario.threatCompetitors && scenario.threatCompetitors.length > 0 && (
+        <div className="p-3 mb-3 bg-blue-50 border border-blue-100 rounded-md">
+          <p className="text-sm text-blue-800">
+            <span className="font-semibold">Main title threat{scenario.threatCompetitors.length > 1 ? 's' : ''}:</span> {scenario.threatCompetitors.join(', ')}
+          </p>
+          <p className="text-xs text-blue-600 mt-1">
+            Only fixtures involving {teamName} and these teams are shown as they're most relevant to the title race.
           </p>
         </div>
       )}

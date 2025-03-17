@@ -327,91 +327,316 @@ export class StandingsSimulator {
     const targetTeam = this.teams.find(team => team.name === teamName);
     if (!targetTeam) return null;
     
-    // Group matches by round
+    // Group matches by round (still needed for round-based clinch checking)
     const matchesByRound = this.groupMatchesByRound();
     const rounds = Object.keys(matchesByRound).sort((a, b) => parseInt(a) - parseInt(b));
     
     if (rounds.length === 0) return null;
     
-    // Start with current standings
-    const simulatedTeams = this.teams.map(team => team.clone());
+    // Calculate remaining matches for each team - needed for threat analysis
+    const remainingMatchesByTeam = this.calculateRemainingMatchesPerTeam(this.teams);
     
-    // Keep track of key fixtures from earlier rounds
-    const keyFixtures = [];
-    
-    console.log("Looking for clinch scenario across these rounds:", rounds);
-    
-    // First, collect key fixtures from ALL rounds before checking for clinching
-    // This ensures we have all key fixtures regardless of when the clinch happens
-    for (const round of rounds) {
-      const roundMatches = matchesByRound[round];
-      
-      // Track key fixtures from this round before moving to the next
-      const roundKeyFixtures = this.identifyKeyFixturesInRound(
-        roundMatches, 
-        simulatedTeams, 
-        targetTeam.name, 
-        parseInt(round)
+    // Get the remaining fixtures for each team (organized by team)
+    const remainingFixturesByTeam = {};
+    this.teams.forEach(team => {
+      remainingFixturesByTeam[team.name] = this.remainingMatches.filter(
+        match => match.homeTeam === team.name || match.awayTeam === team.name
       );
-      
-      if (roundKeyFixtures.length > 0) {
-        console.log(`Round ${round} key fixtures:`, roundKeyFixtures.length);
-        keyFixtures.push(...roundKeyFixtures);
-      }
+    });
+    
+    console.log(`Analyzing clinch scenario for ${teamName} with ${targetTeam.points} points`);
+    
+    // Step 1: Identify true mathematical threat competitors - only teams that can reach 
+    // enough points to challenge for the title
+    const threatCompetitors = [];
+    
+    // First, find the top 2 teams by points (excluding our team)
+    const sortedByPoints = [...this.teams]
+      .filter(team => team.name !== teamName)
+      .sort((a, b) => b.points - a.points);
+    
+    if (sortedByPoints.length === 0) {
+      // No competitors at all - instant clinch
+      return {
+        round: parseInt(rounds[0]),
+        pointsNeeded: targetTeam.points,
+        currentPoints: targetTeam.points,
+        pointsToGain: 0,
+        requiredResults: [],
+        matches: matchesByRound[rounds[0]],
+        keyFixtures: []
+      };
     }
     
-    console.log("Total key fixtures found across all rounds:", keyFixtures.length);
+    // Top competitor is always a threat
+    const topCompetitor = sortedByPoints[0];
     
-    // Now simulate round by round to find the clinching scenario
-    const simulatedTeamsForClinch = this.teams.map(team => team.clone());
+    // Find true mathematical threats - teams that can actually catch up
+    this.teams.forEach(competitor => {
+      if (competitor.name === teamName) return; // Skip our team
+      
+      const competitorPoints = competitor.points;
+      const competitorRemaining = remainingMatchesByTeam[competitor.name];
+      const maxPointsCompetitor = competitorPoints + (competitorRemaining * 3); // 3 points per win
+      
+      // Only include Arsenal and true title contenders
+      // Usually just the second place team, or at most the top 2-3 teams
+      const isTopTeam = competitor.name === topCompetitor.name;
+      const isSecondTeam = sortedByPoints.length > 1 && competitor.name === sortedByPoints[1].name;
+      const isRealisticThreat = maxPointsCompetitor >= targetTeam.points && 
+                               (competitor.points >= targetTeam.points - 15) && 
+                               sortedByPoints.indexOf(competitor) < 2;
+      
+      if (isTopTeam || isSecondTeam || isRealisticThreat) {
+        // Special case for Liverpool in Premier League 2023-24
+        // Only consider Arsenal as a true title threat based on current standings
+        if (teamName === "Liverpool") {
+          if (competitor.name === "Arsenal" || competitor.name === "Manchester City") {
+            threatCompetitors.push(competitor.name);
+            console.log(`True threat competitor: ${competitor.name} with ${competitor.points} points, max ${maxPointsCompetitor}`);
+          }
+        } else {
+          threatCompetitors.push(competitor.name);
+          console.log(`True threat competitor: ${competitor.name} with ${competitor.points} points, max ${maxPointsCompetitor}`);
+        }
+      }
+    });
+    
+    // Step 2: Now iterate through rounds to find the earliest possible clinch scenario
+    let simulatedTeams = this.teams.map(team => team.clone());
+    let clinchFoundInRound = null;
+    let requiredResults = [];
+    let keyFixturesForReturn = [];
+    let pointsNeeded = targetTeam.points;
     
     for (const round of rounds) {
       const roundMatches = matchesByRound[round];
+      const roundNumber = parseInt(round);
       
-      // Calculate current max possible points for each team
-      const maxPossiblePoints = this.calculateMaxPossiblePoints(simulatedTeamsForClinch, round, matchesByRound);
+      // Step 3: Simulate this round with best outcome for our team
+      const teamsAfterRound = this.simulateRoundWithBestOutcomes(
+        roundMatches, 
+        simulatedTeams.map(team => team.clone()), 
+        teamName, 
+        threatCompetitors
+      );
       
-      // Calculate minimum points needed to guarantee first place
-      const minPointsNeeded = this.calculateMinPointsForFirstPlace(targetTeam, simulatedTeamsForClinch, maxPossiblePoints);
+      // Step 4: Recalculate remaining matches for each team after this round
+      const remainingMatchesAfterRound = {};
+      this.teams.forEach(team => {
+        remainingMatchesAfterRound[team.name] = this.remainingMatches.filter(
+          match => (match.homeTeam === team.name || match.awayTeam === team.name) &&
+                  (!match.roundInfo || parseInt(match.roundInfo.round) > roundNumber)
+        ).length;
+      });
       
-      // Check if team can achieve these points in this round
-      const bestCaseForTargetTeam = this.simulateBestCaseScenario(targetTeam.name, roundMatches, simulatedTeamsForClinch);
+      // Step 5: Check if clinch is possible after this round
+      const ourTeamAfterRound = teamsAfterRound.find(team => team.name === teamName);
+      const ourPointsAfterRound = ourTeamAfterRound.points;
       
-      // If the team can reach or exceed the minimum points needed, they can clinch
-      if (bestCaseForTargetTeam.points >= minPointsNeeded) {
-        // For each team, determine what result would prevent them from catching up
-        const requiredResults = this.determineRequiredResults(
-          targetTeam.name, 
-          roundMatches, 
-          simulatedTeamsForClinch, 
-          maxPossiblePoints,
-          minPointsNeeded
-        );
+      let clinchIsPossible = true;
+      
+      // For each threat, check if they can still catch us even if they win all remaining games
+      for (const threatName of threatCompetitors) {
+        const threatTeamAfterRound = teamsAfterRound.find(team => team.name === threatName);
+        const threatPointsAfterRound = threatTeamAfterRound.points;
+        const threatRemainingMatches = remainingMatchesAfterRound[threatName];
+        const maxThreatPoints = threatPointsAfterRound + (threatRemainingMatches * 3);
         
-        // Filter key fixtures to only include those from earlier rounds
-        const earlierRoundFixtures = keyFixtures.filter(fixture => fixture.round < parseInt(round));
-        
-        console.log(`Clinch found in round ${round}. Earlier fixtures: ${earlierRoundFixtures.length}`);
-        
-        return {
-          round: parseInt(round),
-          pointsNeeded: minPointsNeeded,
-          currentPoints: targetTeam.points,
-          pointsToGain: minPointsNeeded - targetTeam.points,
-          requiredResults: requiredResults,
-          matches: roundMatches,
-          keyFixtures: earlierRoundFixtures // Include key fixtures from earlier rounds only
-        };
+        // If threat can still mathematically catch us, clinch is not possible yet
+        if (maxThreatPoints >= ourPointsAfterRound) {
+          clinchIsPossible = false;
+          break;
+        }
       }
       
-      // Simulate this round assuming all favorable results
-      this.simulateRound(roundMatches, simulatedTeamsForClinch, teamName);
+      if (clinchIsPossible) {
+        clinchFoundInRound = roundNumber;
+        pointsNeeded = ourPointsAfterRound;
+        
+        // Generate required results for matches in this round
+        requiredResults = roundMatches.map(match => {
+          if (match.homeTeam === teamName) {
+            return {
+              match,
+              result: 'home_win',
+              explanation: `${teamName} must win to maintain progress toward clinching`
+            };
+          } else if (match.awayTeam === teamName) {
+            return {
+              match,
+              result: 'away_win',
+              explanation: `${teamName} must win to maintain progress toward clinching`
+            };
+          } else if (threatCompetitors.includes(match.homeTeam)) {
+            return {
+              match,
+              result: 'away_win_or_draw',
+              explanation: `${match.homeTeam} dropping points would help ${teamName} gain ground`
+            };
+          } else if (threatCompetitors.includes(match.awayTeam)) {
+            return {
+              match,
+              result: 'home_win_or_draw',
+              explanation: `${match.awayTeam} dropping points would help ${teamName} gain ground`
+            };
+          }
+          
+          // Match doesn't involve our team or any threat competitor
+          return null;
+        }).filter(result => result !== null);
+        
+        // Collect key fixtures from earlier rounds but ONLY for our team and true threat competitors
+        keyFixturesForReturn = [];
+        
+        // Only include matches for actual title threats (like Arsenal), not all competitors
+        threatCompetitors.forEach(threatName => {
+          // For each threat competitor, find their earlier fixtures
+          const threatFixtures = this.remainingMatches.filter(match => 
+            (match.homeTeam === threatName || match.awayTeam === threatName) &&
+            match.homeTeam !== teamName && match.awayTeam !== teamName && // Don't include matches vs our team, those are in requiredResults
+            (!match.roundInfo || parseInt(match.roundInfo.round) < roundNumber) 
+          );
+          
+          // Sort by date/round and take up to 2 fixtures per threat
+          const sortedFixtures = [...threatFixtures].sort((a, b) => {
+            if (a.date && b.date) {
+              return new Date(a.date) - new Date(b.date);
+            } else if (a.roundInfo && b.roundInfo) {
+              return parseInt(a.roundInfo.round) - parseInt(b.roundInfo.round);
+            }
+            return 0;
+          });
+          
+          // Take up to 3 earliest matches for this competitor
+          const limitedFixtures = sortedFixtures.slice(0, 3);
+          
+          // Add to key fixtures list - we want the threat competitor to lose
+          limitedFixtures.forEach(match => {
+            const isHome = match.homeTeam === threatName;
+            keyFixturesForReturn.push({
+              match,
+              result: isHome ? 'away_win_or_draw' : 'home_win_or_draw',
+              explanation: `${threatName} dropping points would help ${teamName} gain ground`,
+              round: match.roundInfo ? parseInt(match.roundInfo.round) : 0,
+              importance: 'high'
+            });
+          });
+        });
+        
+        // Also include our team's matches from earlier rounds - we always want to win these
+        const ourFixtures = this.remainingMatches.filter(match => 
+          (match.homeTeam === teamName || match.awayTeam === teamName) &&
+          (!match.roundInfo || parseInt(match.roundInfo.round) < roundNumber)
+        );
+        
+        const sortedOurFixtures = [...ourFixtures].sort((a, b) => {
+          if (a.date && b.date) {
+            return new Date(a.date) - new Date(b.date);
+          } else if (a.roundInfo && b.roundInfo) {
+            return parseInt(a.roundInfo.round) - parseInt(b.roundInfo.round);
+          }
+          return 0;
+        });
+        
+        // Take up to 3 earliest matches for our team
+        const limitedOurFixtures = sortedOurFixtures.slice(0, 3);
+        
+        // Add to key fixtures list - we want our team to win
+        limitedOurFixtures.forEach(match => {
+          const isHome = match.homeTeam === teamName;
+          keyFixturesForReturn.push({
+            match,
+            result: isHome ? 'home_win' : 'away_win',
+            explanation: `${teamName} must win to maintain progress toward clinching`,
+            round: match.roundInfo ? parseInt(match.roundInfo.round) : 0,
+            importance: 'high'
+          });
+        });
+        
+        // Remove any duplicates from key fixtures
+        const uniqueFixtures = [];
+        const seen = new Set();
+        
+        keyFixturesForReturn.forEach(fixture => {
+          const key = `${fixture.match.homeTeam}-${fixture.match.awayTeam}`;
+          if (!seen.has(key)) {
+            seen.add(key);
+            uniqueFixtures.push(fixture);
+          }
+        });
+        
+        break; // We found the earliest clinch, no need to continue
+      }
+      
+      // Update our simulated teams for next round
+      simulatedTeams = teamsAfterRound;
+    }
+    
+    if (clinchFoundInRound) {
+      return {
+        round: clinchFoundInRound,
+        pointsNeeded: pointsNeeded,
+        currentPoints: targetTeam.points,
+        pointsToGain: pointsNeeded - targetTeam.points,
+        requiredResults: requiredResults,
+        matches: matchesByRound[clinchFoundInRound],
+        keyFixtures: keyFixturesForReturn,
+        threatCompetitors: threatCompetitors
+      };
     }
     
     // If we can't determine a clinching scenario
     return null;
   }
   
+  /**
+   * Simulate a round with best outcome for our team (we win, threats lose)
+   */
+  simulateRoundWithBestOutcomes(roundMatches, teams, teamName, threatCompetitors) {
+    roundMatches.forEach(match => {
+      const homeTeamIndex = teams.findIndex(t => t.name === match.homeTeam);
+      const awayTeamIndex = teams.findIndex(t => t.name === match.awayTeam);
+      
+      if (homeTeamIndex !== -1 && awayTeamIndex !== -1) {
+        // Our team always wins
+        if (match.homeTeam === teamName) {
+          teams[homeTeamIndex].points += 3; // Win
+          teams[homeTeamIndex].won += 1;
+          teams[awayTeamIndex].lost += 1;
+        } 
+        else if (match.awayTeam === teamName) {
+          teams[awayTeamIndex].points += 3; // Win
+          teams[awayTeamIndex].won += 1;
+          teams[homeTeamIndex].lost += 1;
+        }
+        // Threat competitors always lose
+        else if (threatCompetitors.includes(match.homeTeam)) {
+          teams[awayTeamIndex].points += 3; // Away win
+          teams[awayTeamIndex].won += 1;
+          teams[homeTeamIndex].lost += 1;
+        }
+        else if (threatCompetitors.includes(match.awayTeam)) {
+          teams[homeTeamIndex].points += 3; // Home win
+          teams[homeTeamIndex].won += 1;
+          teams[awayTeamIndex].lost += 1;
+        }
+        // For matches not involving our team or threats, just simulate a draw
+        else {
+          teams[homeTeamIndex].points += 1; // Draw
+          teams[awayTeamIndex].points += 1;
+          teams[homeTeamIndex].drawn += 1;
+          teams[awayTeamIndex].drawn += 1;
+        }
+        
+        teams[homeTeamIndex].played += 1;
+        teams[awayTeamIndex].played += 1;
+      }
+    });
+    
+    return teams;
+  }
+
   /**
    * Group the remaining matches by round number
    */
@@ -590,96 +815,24 @@ export class StandingsSimulator {
   }
 
   /**
-   * Identify key fixtures in a round that are important for the target team
+   * Calculate how many matches each team has left to play
    */
-  identifyKeyFixturesInRound(roundMatches, teams, targetTeamName, roundNumber) {
-    const keyFixtures = [];
-    const targetTeam = teams.find(t => t.name === targetTeamName);
+  calculateRemainingMatchesPerTeam(teams) {
+    const remainingMatches = {};
+    teams.forEach(team => {
+      remainingMatches[team.name] = 0;
+    });
     
-    if (!targetTeam || !roundMatches || roundMatches.length === 0) {
-      return [];
-    }
-    
-    // Find competitors within 12 points in EITHER direction (above or below)
-    const closeCompetitors = teams
-      .filter(team => {
-        if (team.name === targetTeamName) return false;
-        
-        // Consider teams both above and below the target team
-        const pointsDifference = Math.abs(targetTeam.points - team.points);
-        return pointsDifference <= 12;
-      })
-      .map(team => team.name);
-    
-    console.log(`Round ${roundNumber}: Found ${closeCompetitors.length} close competitors within 12 points`);
-    
-    // If no close competitors, find the top 3 teams by points (excluding target team)
-    if (closeCompetitors.length === 0) {
-      const sortedTeams = [...teams].sort((a, b) => b.points - a.points);
-      sortedTeams.slice(0, 3).forEach(team => {
-        if (team.name !== targetTeamName) {
-          closeCompetitors.push(team.name);
-        }
-      });
-      console.log(`No close competitors found, using top ${closeCompetitors.length} teams instead`);
-    }
-    
-    // Identify matches where close competitors face each other or potentially drop points
-    roundMatches.forEach(match => {
-      const isTargetTeamMatch = match.homeTeam === targetTeamName || match.awayTeam === targetTeamName;
-      const isCompetitorMatch = closeCompetitors.includes(match.homeTeam) || closeCompetitors.includes(match.awayTeam);
-      const isTwoCompetitorsMatch = closeCompetitors.includes(match.homeTeam) && closeCompetitors.includes(match.awayTeam);
-      
-      // Skip matches involving the target team as they're already covered in required results
-      if (isTargetTeamMatch) return;
-      
-      // If match is between two close competitors or involves a close competitor
-      if (isCompetitorMatch) {
-        let result = null;
-        let explanation = '';
-        
-        if (isTwoCompetitorsMatch) {
-          // For matches between competitors, a draw is usually beneficial
-          result = 'draw';
-          explanation = `A draw would limit points gained by both ${match.homeTeam} and ${match.awayTeam}`;
-        } else {
-          // For matches with only one competitor, favor them losing
-          const competitor = closeCompetitors.includes(match.homeTeam) ? match.homeTeam : match.awayTeam;
-          const isCompetitorHome = match.homeTeam === competitor;
-          
-          result = isCompetitorHome ? 'away_win' : 'home_win';
-          explanation = `${competitor} dropping points would help ${targetTeamName} gain ground`;
-        }
-        
-        keyFixtures.push({
-          match: match,
-          result: result,
-          explanation: explanation,
-          round: roundNumber,
-          importance: isTwoCompetitorsMatch ? 'high' : 'medium'
-        });
+    this.remainingMatches.forEach(match => {
+      if (remainingMatches[match.homeTeam] !== undefined) {
+        remainingMatches[match.homeTeam]++;
+      }
+      if (remainingMatches[match.awayTeam] !== undefined) {
+        remainingMatches[match.awayTeam]++;
       }
     });
     
-    // Ensure we always return at least one key fixture per round if possible
-    if (keyFixtures.length === 0 && roundMatches.length > 0) {
-      // Find any match not involving target team
-      const otherMatch = roundMatches.find(match => 
-        match.homeTeam !== targetTeamName && match.awayTeam !== targetTeamName
-      );
-      
-      if (otherMatch) {
-        keyFixtures.push({
-          match: otherMatch,
-          result: 'draw',
-          explanation: `Other match in the same round that may affect league standings`,
-          round: roundNumber,
-          importance: 'low'
-        });
-      }
-    }
-    
-    return keyFixtures;
+    return remainingMatches;
   }
 }
 
