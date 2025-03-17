@@ -87,8 +87,24 @@ export default function ClincherScenario({ scenario, teamName }) {
       
       <div className="mb-4">
         <p className="text-gray-700">
-          <span className="font-semibold">{teamName}</span> could clinch first place as early as <span className="font-bold">Round {round}</span>.
+          <span className="font-semibold">{teamName}</span> needs to complete these requirements by <span className="font-bold">Round {round}</span>
+          {matches && matches.length > 0 && matches[0]?.date 
+            ? ` (${formatMatchDate(matches[0]?.date).split(',')[0]}${matches[matches.length-1]?.date && matches[0]?.date !== matches[matches.length-1]?.date 
+              ? ` - ${formatMatchDate(matches[matches.length-1]?.date).split(',')[0]}` 
+              : ''})` 
+            : ""}, to set up clinching in <span className="font-bold">Round {round+1}</span>
+            {/* Add estimated next round date - roughly 1 week after current round */}
+            {matches && matches.length > 0 && matches[0]?.date 
+              ? (() => {
+                  const lastMatchDate = new Date(matches[matches.length-1]?.date || matches[0]?.date);
+                  const nextRoundDate = new Date(lastMatchDate);
+                  nextRoundDate.setDate(nextRoundDate.getDate() + 7); // Assuming 1 week between rounds
+                  return ` (${formatMatchDate(nextRoundDate).split(',')[0]})`;
+                })()
+              : ""}
+            .
         </p>
+        
         <p className="text-sm text-gray-600 mt-1">
           Current points: <span className="font-medium">{currentPoints}</span> | 
           Points needed: <span className="font-medium">{pointsNeeded}</span> | 
@@ -220,7 +236,15 @@ export default function ClincherScenario({ scenario, teamName }) {
         <h4 className="text-md font-semibold text-green-800 mb-2">How {teamName} Can Clinch the Title</h4>
         
         <p className="text-sm text-green-700 mb-3">
-          Assuming all prior matches go as shown above, {teamName} could clinch the title on matchday {round+1} in one of these ways:
+          Assuming all prior matches go as shown above, {teamName} could clinch the title on matchday {round+1}
+          {matches && matches.length > 0 && matches[0]?.date 
+            ? (() => {
+                const lastMatchDate = new Date(matches[matches.length-1]?.date || matches[0]?.date);
+                const nextRoundDate = new Date(lastMatchDate);
+                nextRoundDate.setDate(nextRoundDate.getDate() + 7); // Assuming 1 week between rounds
+                return ` (${formatMatchDate(nextRoundDate).split(',')[0]})`;
+              })()
+            : ""} in one of these ways:
         </p>
         
         {scenario.threatCompetitors && scenario.threatCompetitors.length > 0 && (
