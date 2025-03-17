@@ -47,37 +47,6 @@ npm run dev
 ```
 4. Open [http://localhost:3000](http://localhost:3000) in your browser
 
-## Deployment
-
-### Deploying to aidenlyons.com/StandingsSimulator
-
-This application is configured for static export with a base path of `/StandingsSimulator`. To deploy to your website:
-
-1. Build the application:
-```bash
-npm run build
-```
-
-2. This will create an `out` directory with the static export files
-
-3. Copy these files to your main website repository:
-```bash
-# Create directory in your website repo (if it doesn't exist)
-mkdir -p /path/to/your/website/StandingsSimulator
-
-# Copy all built files
-cp -r out/* /path/to/your/website/StandingsSimulator/
-
-# Commit and push to your website repository
-cd /path/to/your/website
-git add StandingsSimulator
-git commit -m "Update Football Standings Simulator"
-git push
-```
-
-4. Your application will be available at `aidenlyons.com/StandingsSimulator`
-
-You can also use the included `deploy.sh` script which will build the application and provide these instructions.
 
 ### API Configuration
 
