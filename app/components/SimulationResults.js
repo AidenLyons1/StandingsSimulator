@@ -27,6 +27,18 @@ export default function SimulationResults({ results }) {
     return value !== undefined ? value.toLocaleString() : '0';
   };
   
+  // Format date to show day, month and time
+  const formatMatchDate = (date) => {
+    if (!date) return 'TBD';
+    
+    return new Intl.DateTimeFormat('en-GB', {
+      day: 'numeric',
+      month: 'short',
+      hour: '2-digit',
+      minute: '2-digit'
+    }).format(new Date(date));
+  };
+  
   return (
     <div className="space-y-6">
       <div className="bg-gray-50 p-4 rounded-md">
@@ -55,7 +67,7 @@ export default function SimulationResults({ results }) {
         
         {isLiveData && (
           <div className="mt-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-            Using live Scottish Championship data
+            Using live {results.leagueName} data
           </div>
         )}
       </div>
@@ -84,6 +96,12 @@ export default function SimulationResults({ results }) {
               <thead className="bg-gray-50">
                 <tr>
                   <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Round
+                  </th>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Date
+                  </th>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Home Team
                   </th>
                   <th scope="col" className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -97,6 +115,12 @@ export default function SimulationResults({ results }) {
               <tbody className="bg-white divide-y divide-gray-200">
                 {remainingMatches.map((match, index) => (
                   <tr key={index}>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {match.roundInfo?.round || 'N/A'}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {formatMatchDate(match.date)}
+                    </td>
                     <td className={`px-6 py-4 whitespace-nowrap text-sm font-medium ${match.homeTeam === teamName ? 'text-blue-600' : 'text-gray-900'}`}>
                       {match.homeTeam}
                     </td>

@@ -41,13 +41,14 @@ class Team {
  * Represents a match between two teams
  */
 class Match {
-  constructor(homeTeam, awayTeam, played = false, homeGoals = 0, awayGoals = 0, roundInfo = null) {
+  constructor(homeTeam, awayTeam, played = false, homeGoals = 0, awayGoals = 0, roundInfo = null, date = null) {
     this.homeTeam = homeTeam;
     this.awayTeam = awayTeam;
     this.played = played;
     this.homeGoals = homeGoals;
     this.awayGoals = awayGoals;
     this.roundInfo = roundInfo; // Used to track which round/week the match is part of
+    this.date = date; // Match date
   }
 }
 

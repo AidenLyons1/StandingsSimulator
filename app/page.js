@@ -9,6 +9,12 @@ import './styles/globals.css';
 export default function Home() {
   const [results, setResults] = useState(null);
   const [loading, setLoading] = useState(false);
+  
+  // Function to handle receiving results from the simulator
+  const handleResults = (data) => {
+    setResults(data);
+    setLoading(false);
+  };
 
   return (
     <main className="min-h-screen p-6 md:p-12 bg-white">
@@ -21,12 +27,12 @@ export default function Home() {
             Calculate all possible combinations that would allow your team to finish in a specific position
           </p>
           <p className="text-gray-500 text-sm">
-            Scottish Championship live data from Sofascore API
+            {results ? `${results.leagueName} live data from Sofascore API` : 'Live data from Sofascore API'}
           </p>
         </header>
 
         <div className="bg-white rounded-lg shadow-lg p-6 mb-8">
-          <SimulatorForm setResults={setResults} setLoading={setLoading} />
+          <SimulatorForm setResults={handleResults} setLoading={setLoading} />
         </div>
 
         {loading && (

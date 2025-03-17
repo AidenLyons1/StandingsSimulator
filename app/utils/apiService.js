@@ -39,7 +39,7 @@ export async function fetchScottishChampionshipData() {
     const teams = parseTeamsData(standingsData);
     
     // Fetch upcoming matches
-    const matchesData = await fetchUpcomingMatches();
+    const matchesData = await fetchUpcomingMatches('206', '62411');
     
     // Parse matches data
     const matches = parseUpcomingMatches(matchesData, teams);
@@ -56,15 +56,53 @@ export async function fetchScottishChampionshipData() {
   }
 }
 
+// Function to fetch English Premier League standings from Sofascore API
+export async function fetchEnglishPremierLeagueData() {
+  try {
+    // Fetch standings
+    const standingsResponse = await fetch(`${getApiUrl()}/api/v1/unique-tournament/17/season/61627/standings/total`, {
+      headers: {
+        'Accept': 'application/json',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+      }
+    });
+    
+    if (!standingsResponse.ok) {
+      throw new Error(`Failed to fetch EPL standings data: ${standingsResponse.status}`);
+    }
+    
+    const standingsData = await standingsResponse.json();
+    
+    // Parse teams data first
+    const teams = parseTeamsData(standingsData);
+    
+    // Fetch upcoming matches
+    const matchesData = await fetchUpcomingMatches('17', '61627');
+    
+    // Parse matches data
+    const matches = parseUpcomingMatches(matchesData, teams);
+    
+    return {
+      teams,
+      matches,
+      leagueName: 'English Premier League',
+      isLiveData: true
+    };
+  } catch (error) {
+    console.error('Error fetching English Premier League data:', error);
+    return null;
+  }
+}
+
 // Function to fetch all upcoming matches with pagination handling
-async function fetchUpcomingMatches() {
+async function fetchUpcomingMatches(tournamentId, seasonId) {
   let allMatches = [];
   let page = 0;
   let hasMorePages = true;
   
   while (hasMorePages) {
     try {
-      const response = await fetch(`${getApiUrl()}/api/v1/unique-tournament/206/season/62411/events/next/${page}`, {
+      const response = await fetch(`${getApiUrl()}/api/v1/unique-tournament/${tournamentId}/season/${seasonId}/events/next/${page}`, {
         headers: {
           'Accept': 'application/json',
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
@@ -136,13 +174,16 @@ function parseUpcomingMatches(matchesData, teams) {
   matchesData.forEach(event => {
     if (event.status?.type === 'notstarted' || event.status?.type === 'postponed') {
       // Only include matches that haven't been played yet
+      const matchDate = event.startTimestamp ? new Date(event.startTimestamp * 1000) : null;
+      
       const match = new Match(
         event.homeTeam.name,
         event.awayTeam.name,
         false, // not played
         0,     // home goals
         0,     // away goals
-        event.roundInfo // Include round information
+        event.roundInfo, // Include round information
+        matchDate      // Include match date
       );
       
       parsedMatches.push(match);

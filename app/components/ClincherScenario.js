@@ -19,6 +19,18 @@ export default function ClincherScenario({ scenario, teamName }) {
 
   const { round, pointsNeeded, currentPoints, pointsToGain, requiredResults, matches, keyFixtures } = scenario;
   
+  // Format date to show day, month and time
+  const formatMatchDate = (date) => {
+    if (!date) return 'TBD';
+    
+    return new Intl.DateTimeFormat('en-GB', {
+      day: 'numeric',
+      month: 'short',
+      hour: '2-digit',
+      minute: '2-digit'
+    }).format(new Date(date));
+  };
+  
   // Debug logging
   console.log("Clinch scenario data:", {
     round,
@@ -92,22 +104,26 @@ export default function ClincherScenario({ scenario, teamName }) {
           {requiredResults.map((result, index) => (
             <div key={index} className="px-4 py-3">
               <div className="flex justify-between items-center">
-                <div className="flex items-center">
-                  <span className={`font-medium ${result.match.homeTeam === teamName ? 'text-blue-600' : 'text-gray-800'}`}>
-                    {result.match.homeTeam}
-                  </span>
-                  <span className="mx-2 text-gray-500">vs</span>
-                  <span className={`font-medium ${result.match.awayTeam === teamName ? 'text-blue-600' : 'text-gray-800'}`}>
-                    {result.match.awayTeam}
-                  </span>
+                <div className="flex flex-col">
+                  <div className="flex items-center">
+                    <span className={`font-medium ${result.match.homeTeam === teamName ? 'text-blue-600' : 'text-gray-800'}`}>
+                      {result.match.homeTeam}
+                    </span>
+                    <span className="mx-2 text-gray-500">vs</span>
+                    <span className={`font-medium ${result.match.awayTeam === teamName ? 'text-blue-600' : 'text-gray-800'}`}>
+                      {result.match.awayTeam}
+                    </span>
+                  </div>
+                  {result.match.date && (
+                    <div className="text-xs text-gray-500 mt-1">
+                      {formatMatchDate(result.match.date)}
+                    </div>
+                  )}
                 </div>
-                <span className="text-sm px-2 py-1 rounded-full bg-blue-100 text-blue-800">
+                <span className="text-sm px-3 py-1 rounded-full bg-blue-100 text-blue-700">
                   {formatResult(result.result)}
                 </span>
               </div>
-              <p className="text-sm text-gray-600 mt-1">
-                {result.explanation}
-              </p>
             </div>
           ))}
         </div>

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { StandingsSimulator } from '../utils/simulator';
-import { fetchScottishChampionshipData } from '../utils/apiService';
+import { fetchScottishChampionshipData, fetchEnglishPremierLeagueData } from '../utils/apiService';
 
 export default function SimulatorForm({ setResults, setLoading }) {
   const [selectedTeam, setSelectedTeam] = useState('');
@@ -11,15 +11,25 @@ export default function SimulatorForm({ setResults, setLoading }) {
   const [error, setError] = useState('');
   const [liveData, setLiveData] = useState(null);
   const [dataLoading, setDataLoading] = useState(true);
+  const [selectedLeague, setSelectedLeague] = useState('scottish');
 
-  // Fetch live data when component mounts
+  // Fetch live data when component mounts or league changes
   useEffect(() => {
     async function loadLiveData() {
       setDataLoading(true);
+      setSelectedTeam(''); // Reset selected team when league changes
+      
       try {
-        const scottishData = await fetchScottishChampionshipData();
-        if (scottishData) {
-          setLiveData(scottishData);
+        let leagueData;
+        
+        if (selectedLeague === 'scottish') {
+          leagueData = await fetchScottishChampionshipData();
+        } else if (selectedLeague === 'english') {
+          leagueData = await fetchEnglishPremierLeagueData();
+        }
+        
+        if (leagueData) {
+          setLiveData(leagueData);
         } else {
           setError('Could not load league data. Please try again later.');
         }
@@ -32,7 +42,7 @@ export default function SimulatorForm({ setResults, setLoading }) {
     }
     
     loadLiveData();
-  }, []);
+  }, [selectedLeague]);
 
   // Get the teams from live data
   const getTeams = () => {
@@ -111,7 +121,7 @@ export default function SimulatorForm({ setResults, setLoading }) {
           remainingMatches: teamRemainingMatches,
           allRemainingMatches: simulator.remainingMatches, // All remaining matches for all teams
           isLiveData: true,
-          leagueName: 'Scottish Championship',
+          leagueName: selectedLeague === 'scottish' ? 'Scottish Championship' : 'English Premier League',
           clinchScenario: clinchScenario, // Add the clinch scenario for 1st place
           projectedTable: projectedTable // Add the projected end-of-season table
         });
@@ -131,113 +141,134 @@ export default function SimulatorForm({ setResults, setLoading }) {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
-      {dataLoading ? (
-        <div className="flex justify-center items-center p-6">
-          <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
-          <span className="ml-3">Loading league data...</span>
-        </div>
-      ) : (
-        <>
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-medium">
-              Scottish Championship Data
-            </h3>
-            {liveData && (
-              <div className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                Live Data
-              </div>
-            )}
+    <div>
+      {error && <div className="p-3 bg-red-100 border border-red-400 text-red-700 rounded mb-4">{error}</div>}
+      
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="mb-4">
+          <label className="block text-gray-700 font-semibold mb-2">Select League</label>
+          <div className="flex gap-4">
+            <button
+              type="button"
+              className={`px-4 py-2 rounded-lg flex-1 ${
+                selectedLeague === 'scottish' 
+                  ? 'bg-blue-600 text-white' 
+                  : 'bg-gray-200 text-gray-700'
+              }`}
+              onClick={() => setSelectedLeague('scottish')}
+            >
+              Scottish Championship
+            </button>
+            <button
+              type="button"
+              className={`px-4 py-2 rounded-lg flex-1 ${
+                selectedLeague === 'english' 
+                  ? 'bg-blue-600 text-white' 
+                  : 'bg-gray-200 text-gray-700'
+              }`}
+              onClick={() => setSelectedLeague('english')}
+            >
+              English Premier League
+            </button>
           </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <label htmlFor="team" className="block text-sm font-medium text-gray-700 mb-1">
-                Select Team
-              </label>
+        </div>
+        
+        {dataLoading ? (
+          <div className="flex justify-center py-8">
+            <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
+            <span className="ml-2">Loading {selectedLeague === 'scottish' ? 'Scottish Championship' : 'English Premier League'} data...</span>
+          </div>
+        ) : (
+          <>
+            <div className="mb-4">
+              <label htmlFor="team" className="block text-gray-700 font-semibold mb-2">Select Team</label>
               <select
                 id="team"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                 value={selectedTeam}
                 onChange={(e) => setSelectedTeam(e.target.value)}
+                className="block w-full p-2 border border-gray-300 rounded focus:ring-blue-500 focus:border-blue-500"
+                disabled={dataLoading}
               >
-                <option value="">-- Select a team --</option>
+                <option value="">Select a team</option>
                 {getTeams().map((team) => (
-                  <option key={team.name} value={team.name}>
+                  <option key={team.id} value={team.name}>
                     {team.name}
                   </option>
                 ))}
               </select>
             </div>
 
-            <div>
-              <label htmlFor="position" className="block text-sm font-medium text-gray-700 mb-1">
-                Target Position
+            <div className="mb-4">
+              <label htmlFor="position" className="block text-gray-700 font-semibold mb-2">
+                Target Position (1-{getTeamCount()})
               </label>
               <input
-                type="number"
                 id="position"
+                type="number"
                 min="1"
                 max={getTeamCount()}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                 value={targetPosition}
                 onChange={(e) => setTargetPosition(e.target.value)}
-                placeholder={`Enter position (1-${getTeamCount()})`}
+                className="block w-full p-2 border border-gray-300 rounded focus:ring-blue-500 focus:border-blue-500"
+                disabled={dataLoading}
               />
             </div>
-          </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Simulation Method
-            </label>
-            <div className="flex space-x-4">
-              <label className="inline-flex items-center">
-                <input
-                  type="radio"
-                  className="form-radio text-blue-500"
-                  name="simMethod"
-                  value="exact"
-                  checked={simMethod === 'exact'}
-                  onChange={() => setSimMethod('exact')}
-                />
-                <span className="ml-2">Exact Calculation</span>
-              </label>
-              
-              <label className="inline-flex items-center">
-                <input
-                  type="radio"
-                  className="form-radio text-blue-500"
-                  name="simMethod"
-                  value="monteCarlo"
-                  checked={simMethod === 'monteCarlo'}
-                  onChange={() => setSimMethod('monteCarlo')}
-                />
-                <span className="ml-2">Monte Carlo Simulation</span>
-              </label>
+            <div className="mb-4">
+              <label className="block text-gray-700 font-semibold mb-2">Simulation Method</label>
+              <div className="flex gap-4">
+                <button
+                  type="button"
+                  className={`px-4 py-2 rounded-lg flex-1 ${
+                    simMethod === 'exact' 
+                      ? 'bg-blue-600 text-white' 
+                      : 'bg-gray-200 text-gray-700'
+                  }`}
+                  onClick={() => setSimMethod('exact')}
+                  disabled={dataLoading}
+                >
+                  Exact Calculation
+                </button>
+                <button
+                  type="button"
+                  className={`px-4 py-2 rounded-lg flex-1 ${
+                    simMethod === 'monte' 
+                      ? 'bg-blue-600 text-white' 
+                      : 'bg-gray-200 text-gray-700'
+                  }`}
+                  onClick={() => setSimMethod('monte')}
+                  disabled={dataLoading}
+                >
+                  Monte Carlo
+                </button>
+              </div>
+              <p className="text-xs text-gray-500 mt-1">
+                {simMethod === 'exact' 
+                  ? 'Calculates all possible outcomes (may be slow with many remaining fixtures)' 
+                  : 'Uses random sampling for faster results with many fixtures'}
+              </p>
             </div>
-            <p className="text-xs text-gray-500 mt-1">
-              {simMethod === 'exact' 
-                ? 'Calculates exact probabilities but may be slow for many remaining matches' 
-                : 'Uses statistical approximation, faster but provides estimated results'}
-            </p>
-          </div>
 
-          {error && (
-            <div className="text-red-500 text-sm">{error}</div>
-          )}
-
-          <div>
-            <button
-              type="submit"
-              className="w-full inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-              disabled={!liveData || dataLoading}
-            >
-              Run Simulation
-            </button>
-          </div>
-        </>
+            <div className="mt-6">
+              <button
+                type="submit"
+                className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 disabled:opacity-50"
+                disabled={dataLoading}
+              >
+                Run Simulation
+              </button>
+            </div>
+          </>
+        )}
+      </form>
+      
+      {liveData && !dataLoading && (
+        <div className="mt-4 text-sm text-gray-500">
+          <p>League: {liveData.leagueName}</p>
+          <p>Teams: {getTeamCount()}</p>
+          <p>Remaining Fixtures: {getFixtures().length}</p>
+        </div>
       )}
-    </form>
+    </div>
   );
 } 
