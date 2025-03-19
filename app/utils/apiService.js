@@ -28,55 +28,22 @@ function getRapidAPIKey() {
   return process.env.NEXT_PUBLIC_RAPIDAPI_KEY || '';
 }
 
-// Function to fetch Scottish Championship standings from RapidAPI
+// Function to fetch Scottish Championship data from our server-side API route
 export async function fetchScottishChampionshipData() {
   try {
-    const apiKey = getRapidAPIKey();
+    // Call our own server-side API route
+    const response = await fetch('/api/scottish-championship');
     
-    if (!apiKey) {
-      console.error('RapidAPI key is missing! Set NEXT_PUBLIC_RAPIDAPI_KEY in environment variables');
-      return null;
+    if (!response.ok) {
+      throw new Error(`Failed to fetch data: ${response.status}`);
     }
     
-    // Fetch standings from the new RapidAPI endpoint
-    const standingsResponse = await fetch('https://football-web-pages1.p.rapidapi.com/league-table.json?comp=18', {
-      headers: {
-        'x-rapidapi-key': apiKey,
-        'x-rapidapi-host': 'football-web-pages1.p.rapidapi.com',
-        'Accept': 'application/json'
-      }
-    });
+    const data = await response.json();
     
-    if (!standingsResponse.ok) {
-      throw new Error(`Failed to fetch standings data: ${standingsResponse.status}`);
-    }
-    
-    const standingsData = await standingsResponse.json();
-    
-    // Parse teams data from the new API format
-    const teams = parseRapidAPITeamsData(standingsData);
-    
-    // Fetch fixtures from the new RapidAPI endpoint
-    const fixturesResponse = await fetch('https://football-web-pages1.p.rapidapi.com/fixtures-results.json?comp=18', {
-      headers: {
-        'x-rapidapi-key': apiKey,
-        'x-rapidapi-host': 'football-web-pages1.p.rapidapi.com',
-        'Accept': 'application/json'
-      }
-    });
-    
-    if (!fixturesResponse.ok) {
-      throw new Error(`Failed to fetch fixtures data: ${fixturesResponse.status}`);
-    }
-    
-    const fixturesData = await fixturesResponse.json();
-    
-    // Parse fixtures data from the new API format
-    const matches = parseRapidAPIFixturesData(fixturesData);
-    
+    // Return the data with league name and isLiveData flag
     return {
-      teams,
-      matches,
+      teams: data.teams,
+      matches: data.matches,
       leagueName: 'Scottish Championship',
       isLiveData: true
     };
@@ -86,55 +53,22 @@ export async function fetchScottishChampionshipData() {
   }
 }
 
-// Function to fetch English Premier League standings from RapidAPI
+// Function to fetch English Premier League data from our server-side API route
 export async function fetchEnglishPremierLeagueData() {
   try {
-    const apiKey = getRapidAPIKey();
+    // Call our own server-side API route
+    const response = await fetch('/api/english-premier-league');
     
-    if (!apiKey) {
-      console.error('RapidAPI key is missing! Set NEXT_PUBLIC_RAPIDAPI_KEY in environment variables');
-      return null;
+    if (!response.ok) {
+      throw new Error(`Failed to fetch data: ${response.status}`);
     }
     
-    // Fetch standings from the RapidAPI endpoint using comp=1 for EPL
-    const standingsResponse = await fetch('https://football-web-pages1.p.rapidapi.com/league-table.json?comp=1', {
-      headers: {
-        'x-rapidapi-key': apiKey,
-        'x-rapidapi-host': 'football-web-pages1.p.rapidapi.com',
-        'Accept': 'application/json'
-      }
-    });
+    const data = await response.json();
     
-    if (!standingsResponse.ok) {
-      throw new Error(`Failed to fetch EPL standings data: ${standingsResponse.status}`);
-    }
-    
-    const standingsData = await standingsResponse.json();
-    
-    // Parse teams data from the same RapidAPI format
-    const teams = parseRapidAPITeamsData(standingsData);
-    
-    // Fetch fixtures from the RapidAPI endpoint
-    const fixturesResponse = await fetch('https://football-web-pages1.p.rapidapi.com/fixtures-results.json?comp=1', {
-      headers: {
-        'x-rapidapi-key': apiKey,
-        'x-rapidapi-host': 'football-web-pages1.p.rapidapi.com',
-        'Accept': 'application/json'
-      }
-    });
-    
-    if (!fixturesResponse.ok) {
-      throw new Error(`Failed to fetch EPL fixtures data: ${fixturesResponse.status}`);
-    }
-    
-    const fixturesData = await fixturesResponse.json();
-    
-    // Parse fixtures data using the same function as Scottish Championship
-    const matches = parseRapidAPIFixturesData(fixturesData);
-    
+    // Return the data with league name and isLiveData flag
     return {
-      teams,
-      matches,
+      teams: data.teams,
+      matches: data.matches,
       leagueName: 'English Premier League',
       isLiveData: true
     };
@@ -144,9 +78,7 @@ export async function fetchEnglishPremierLeagueData() {
   }
 }
 
-// LEGACY CODE - No longer used
 // Function to fetch all upcoming matches with pagination handling
-/*
 async function fetchUpcomingMatches(tournamentId, seasonId) {
   let allMatches = [];
   let page = 0;
@@ -188,7 +120,7 @@ async function fetchUpcomingMatches(tournamentId, seasonId) {
   return allMatches;
 }
 
-// Parse the teams data from the API - No longer used
+// Parse the teams data from the API
 function parseTeamsData(apiData) {
   if (!apiData?.standings?.[0]?.rows) {
     throw new Error('Invalid API data format');
@@ -215,7 +147,7 @@ function parseTeamsData(apiData) {
   return teams;
 }
 
-// Parse the upcoming matches data from API into our Match model - No longer used
+// Parse the upcoming matches data from API into our Match model
 function parseUpcomingMatches(matchesData, teams) {
   if (!matchesData || !Array.isArray(matchesData) || matchesData.length === 0) {
     return generateFixtures(teams); // Generate fallback fixtures if no data is available
@@ -251,7 +183,6 @@ function parseUpcomingMatches(matchesData, teams) {
   
   return parsedMatches;
 }
-*/
 
 // Generate fixtures based on teams when API data is unavailable
 function generateFixtures(teams) {
