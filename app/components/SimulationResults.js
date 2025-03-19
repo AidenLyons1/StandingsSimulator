@@ -39,6 +39,24 @@ export default function SimulationResults({ results }) {
     }).format(new Date(date));
   };
   
+  // Format display date for round (e.g., "April 13")
+  const formatRoundDisplayDate = (roundStr) => {
+    if (!roundStr) return '';
+    
+    // If it's already in Month Day format (e.g., "Apr 13"), convert to full month name
+    if (typeof roundStr === 'string' && roundStr.match(/[A-Za-z]+\s\d+/)) {
+      const [monthAbbr, day] = roundStr.split(' ');
+      const monthMap = {
+        'Jan': 'January', 'Feb': 'February', 'Mar': 'March', 'Apr': 'April',
+        'May': 'May', 'Jun': 'June', 'Jul': 'July', 'Aug': 'August',
+        'Sep': 'September', 'Oct': 'October', 'Nov': 'November', 'Dec': 'December'
+      };
+      return monthMap[monthAbbr] ? `${monthMap[monthAbbr]} ${day}` : roundStr;
+    }
+    
+    return roundStr;
+  };
+  
   return (
     <div className="space-y-6">
       <div className="bg-gray-50 p-4 rounded-md">
@@ -96,9 +114,6 @@ export default function SimulationResults({ results }) {
               <thead className="bg-gray-50">
                 <tr>
                   <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Round
-                  </th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Date
                   </th>
                   <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -115,9 +130,6 @@ export default function SimulationResults({ results }) {
               <tbody className="bg-white divide-y divide-gray-200">
                 {remainingMatches.map((match, index) => (
                   <tr key={index}>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {match.roundInfo?.round || 'N/A'}
-                    </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {formatMatchDate(match.date)}
                     </td>

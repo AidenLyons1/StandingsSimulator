@@ -14,25 +14,11 @@ const nextConfig = {
     },
     trailingSlash: true,
   }),
-  // For Vercel deployment, don't use basePath
+  // For Vercel deployment
   ...(isProduction && isVercel && {
-    images: {
-      domains: ['www.sofascore.com'],
-    },
+    // Keep any Vercel-specific configuration here if needed
   }),
-  // Rewrites don't work with static export, but we'll keep this
-  // for development mode and Vercel
-  async rewrites() {
-    if (process.env.NODE_ENV === 'development' || process.env.VERCEL === '1') {
-      return [
-        {
-          source: '/api/sofascore/:path*',
-          destination: 'https://www.sofascore.com/:path*',
-        },
-      ];
-    }
-    return [];
-  },
+  // Note: We've removed the SofaScore API rewrites as they're no longer used
 }
 
 module.exports = nextConfig 

@@ -17,7 +17,7 @@ export default function ClincherScenario({ scenario, teamName }) {
     );
   }
 
-  const { round, pointsNeeded, currentPoints, pointsToGain, requiredResults, matches, keyFixtures } = scenario;
+  const { round, clinchingRound, pointsNeeded, currentPoints, pointsToGain, requiredResults, matches, keyFixtures } = scenario;
   
   // Format date to show day, month and time
   const formatMatchDate = (date) => {
@@ -31,9 +31,39 @@ export default function ClincherScenario({ scenario, teamName }) {
     }).format(new Date(date));
   };
   
+  // Format date for display in the UI (e.g., "April 13")
+  const formatDisplayDate = (date) => {
+    if (!date) return 'TBD';
+    
+    const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+    const d = new Date(date);
+    const month = months[d.getMonth()];
+    const day = d.getDate();
+    return `${month} ${day}`;
+  };
+  
+  // Format round for display
+  const formatRoundDisplay = (roundStr) => {
+    if (!roundStr) return '';
+    
+    // If it's already in Month Day format (e.g., "Apr 13"), convert to full month name
+    if (typeof roundStr === 'string' && roundStr.match(/[A-Za-z]+\s\d+/)) {
+      const [monthAbbr, day] = roundStr.split(' ');
+      const monthMap = {
+        'Jan': 'January', 'Feb': 'February', 'Mar': 'March', 'Apr': 'April',
+        'May': 'May', 'Jun': 'June', 'Jul': 'July', 'Aug': 'August',
+        'Sep': 'September', 'Oct': 'October', 'Nov': 'November', 'Dec': 'December'
+      };
+      return monthMap[monthAbbr] ? `${monthMap[monthAbbr]} ${day}` : roundStr;
+    }
+    
+    return roundStr;
+  };
+  
   // Debug logging
   console.log("Clinch scenario data:", {
     round,
+    clinchingRound,
     pointsNeeded,
     keyFixtures: keyFixtures || [],
     keyFixturesLength: keyFixtures ? keyFixtures.length : 0
@@ -81,34 +111,59 @@ export default function ClincherScenario({ scenario, teamName }) {
                          keyFixtures.length > 0 && 
                          Object.keys(keyFixturesByRound).length > 0;
 
+  // Get display names for rounds
+  const displayRound = round;
+  const displayClinchingRound = clinchingRound || (typeof round === 'number' ? round + 1 : round);
+
   return (
     <div className="bg-blue-50 p-3 sm:p-4 rounded-md mb-6">
       <h3 className="text-lg font-medium mb-2 text-blue-800">Earliest First Place Clinch Scenario</h3>
       
       <div className="mb-4">
         <p className="text-gray-700 text-sm sm:text-base">
-          <span className="font-semibold">{teamName}</span> needs to complete these requirements by <span className="font-bold">Round {round}</span>
-          {matches && matches.length > 0 && matches[0]?.date 
-            ? ` (${formatMatchDate(matches[0]?.date).split(',')[0]}${matches[matches.length-1]?.date && matches[0]?.date !== matches[matches.length-1]?.date 
-              ? ` - ${formatMatchDate(matches[matches.length-1]?.date).split(',')[0]}` 
-              : ''})` 
-            : ""}, to set up clinching in <span className="font-bold">Round {round+1}</span>
-            {/* Add estimated next round date - roughly 1 week after current round */}
-            {matches && matches.length > 0 && matches[0]?.date 
-              ? (() => {
-                  const lastMatchDate = new Date(matches[matches.length-1]?.date || matches[0]?.date);
-                  const nextRoundDate = new Date(lastMatchDate);
-                  nextRoundDate.setDate(nextRoundDate.getDate() + 7); // Assuming 1 week between rounds
-                  return ` (${formatMatchDate(nextRoundDate).split(',')[0]})`;
-                })()
-              : ""}
-            .
+          <span className="font-semibold">{teamName}</span> needs to complete these requirements by <span className="font-bold">{formatRoundDisplay(displayRound)}</span>.
         </p>
         
         <p className="text-xs sm:text-sm text-gray-600 mt-1">
-          Current points: <span className="font-medium">{currentPoints}</span> | 
-          Points needed: <span className="font-medium">{pointsNeeded}</span> | 
-          Points to gain: <span className="font-medium">{pointsToGain}</span>
+          {(() => {
+            // Calculate actual points from required wins
+            const teamWinsInRequiredResults = requiredResults.filter(result => 
+              (result.match.homeTeam === teamName && result.result === 'home_win') ||
+              (result.match.awayTeam === teamName && result.result === 'away_win')
+            ).length;
+            
+            const teamWinsInKeyFixtures = keyFixtures ? keyFixtures.filter(fixture => 
+              (fixture.match.homeTeam === teamName && fixture.result === 'home_win') ||
+              (fixture.match.awayTeam === teamName && fixture.result === 'away_win')
+            ).length : 0;
+            
+            const totalRequiredWins = teamWinsInRequiredResults + teamWinsInKeyFixtures;
+            const pointsFromRequiredWins = totalRequiredWins * 3;
+            
+            // If there's a discrepancy, show both calculations
+            if (pointsFromRequiredWins !== pointsToGain && totalRequiredWins > 0) {
+              return (
+                <>
+                  Current points: <span className="font-medium">{currentPoints}</span> | 
+                  Minimum points needed: <span className="font-medium">{pointsNeeded}</span> | 
+                  Points to gain: <span className="font-medium">{pointsToGain}</span>
+                  <div className="mt-1">
+                    <span className="text-blue-600">Note:</span> The scenario shows {totalRequiredWins} required wins ({pointsFromRequiredWins} points)
+                    which is the optimal path to clinching.
+                  </div>
+                </>
+              );
+            }
+            
+            // Default case with no discrepancy
+            return (
+              <>
+                Current points: <span className="font-medium">{currentPoints}</span> | 
+                Points needed: <span className="font-medium">{pointsNeeded}</span> | 
+                Points to gain: <span className="font-medium">{pointsToGain}</span>
+              </>
+            );
+          })()}
         </p>
         {scenario.needsOneMoreResult && !scenario.canClinchMathematically && (
           <p className="mt-2 text-xs sm:text-sm text-blue-700 bg-blue-50 p-2 border border-blue-100 rounded">
@@ -120,7 +175,7 @@ export default function ClincherScenario({ scenario, teamName }) {
       
       <div className="mb-4">
         <h4 className="text-sm sm:text-md font-medium mb-2 text-blue-700">
-          Required Results in Round {round}
+          Required Results in {formatRoundDisplay(displayRound)}
         </h4>
         <div className="bg-white rounded-md border border-blue-100 divide-y divide-blue-100">
           {requiredResults.map((result, index) => (
@@ -151,6 +206,94 @@ export default function ClincherScenario({ scenario, teamName }) {
         </div>
       </div>
       
+      {/* Add clinching day explanation - moved up */}
+      <div className="mt-4 mb-4">
+        <h4 className="text-md font-medium mb-2 text-blue-700">
+          How {teamName} Can Clinch the Title
+        </h4>
+        
+        <div className="bg-white rounded-md border border-blue-100 p-3 mb-2">
+          {scenario.canClinchInCurrentRound ? (
+            <p className="text-sm text-gray-700">
+              Assuming all prior matches go as shown below, {teamName} could clinch the title on {formatRoundDisplay(displayRound)} with a win or draw in their match.
+            </p>
+          ) : (
+            <p className="text-sm text-gray-700">
+              Assuming all prior matches go as shown below, {teamName} could clinch the title on {formatRoundDisplay(displayClinchingRound)} in one of these ways:
+            </p>
+          )}
+          
+          {!scenario.canClinchInCurrentRound && (
+            <div className="mt-3 space-y-3">
+              <div>
+                <p className="text-sm font-medium text-gray-700">Scenario 1:</p>
+                <p className="text-sm text-gray-600 ml-4">
+                  If {scenario.threatCompetitors && scenario.threatCompetitors.length > 0 ? 
+                      `${scenario.threatCompetitors[0]}${scenario.threatCompetitors.length > 1 ? ' (or other threats)' : ''}` : 
+                      'competitors'} lose or draw their matches, {teamName} will clinch the title regardless of their own result.
+                </p>
+              </div>
+              
+              <div>
+                <p className="text-sm font-medium text-gray-700">Scenario 2:</p>
+                <p className="text-sm text-gray-600 ml-4">
+                  If all title threats win their matches, {teamName} will need at least a draw in their own match to clinch.
+                </p>
+              </div>
+            </div>
+          )}
+          
+          <p className="text-xs text-gray-500 mt-3">
+            This clinching scenario requires {teamName} to have built up a sufficient points advantage through the results of earlier fixtures shown above.
+          </p>
+          
+          {clinchingRound && scenario.matches && (
+            <div className="text-xs text-gray-500 mt-2">
+              The clinching match would be 
+              {(() => {
+                // Find matches in the clinching round that involve our team
+                let clinchingMatches = scenario.matches.filter(
+                  match => match.roundInfo && match.roundInfo.round === clinchingRound &&
+                  (match.homeTeam === teamName || match.awayTeam === teamName)
+                );
+                
+                // If we couldn't find by roundInfo, try using dates
+                if (clinchingMatches.length === 0 && scenario.matches.some(m => m.date)) {
+                  // Look for match in the current round (which is the clinching round if canClinchInCurrentRound is true)
+                  clinchingMatches = scenario.matches.filter(
+                    match => (match.homeTeam === teamName || match.awayTeam === teamName)
+                  );
+                  
+                  // Sort by date and pick the first one if multiple exist
+                  clinchingMatches.sort((a, b) => 
+                    a.date && b.date ? new Date(a.date) - new Date(b.date) : 0
+                  );
+                }
+                
+                // If we found a clinching match
+                if (clinchingMatches.length > 0) {
+                  const ourMatch = clinchingMatches[0];
+                  return ` ${ourMatch.homeTeam} vs ${ourMatch.awayTeam}`;
+                }
+                
+                // If we still haven't found the match, just return a generic statement
+                return ' your next match';
+              })()}
+              .
+            </div>
+          )}
+        </div>
+        
+        <div className="bg-white rounded-md border border-blue-100 p-3">
+          <p className="text-sm font-medium text-gray-700 mb-1">
+            Main title threats: {scenario.threatCompetitors?.join(', ')}
+          </p>
+          <p className="text-xs text-gray-500">
+            Only fixtures involving {teamName} and these teams are shown as they're most relevant to the title race.
+          </p>
+        </div>
+      </div>
+      
       {/* Show key fixtures from earlier rounds */}
       {hasKeyFixtures && (
         <div className="mb-4">
@@ -158,9 +301,28 @@ export default function ClincherScenario({ scenario, teamName }) {
             Key Fixtures from Earlier Rounds
           </h4>
           
-          {Object.keys(keyFixturesByRound).sort((a, b) => parseInt(a) - parseInt(b)).map(roundNum => (
+          {Object.keys(keyFixturesByRound).sort((a, b) => {
+            // For date-based rounds (Apr 14 format), sort chronologically
+            if (a.match(/[A-Za-z]+\s\d+/) && b.match(/[A-Za-z]+\s\d+/)) {
+              const monthsOrder = {
+                'Jan': 0, 'Feb': 1, 'Mar': 2, 'Apr': 3, 'May': 4, 'Jun': 5,
+                'Jul': 6, 'Aug': 7, 'Sep': 8, 'Oct': 9, 'Nov': 10, 'Dec': 11
+              };
+              
+              const [aMonth, aDay] = a.split(' ');
+              const [bMonth, bDay] = b.split(' ');
+              
+              if (monthsOrder[aMonth] !== monthsOrder[bMonth]) {
+                return monthsOrder[aMonth] - monthsOrder[bMonth];
+              }
+              return parseInt(aDay) - parseInt(bDay);
+            }
+            
+            // Default to numeric sorting for round numbers
+            return parseInt(a) - parseInt(b);
+          }).map(roundNum => (
             <div key={roundNum} className="mb-3">
-              <h5 className="text-xs sm:text-sm font-medium text-gray-700 mb-2">Round {roundNum}</h5>
+              <h5 className="text-xs sm:text-sm font-medium text-gray-700 mb-2">{formatRoundDisplay(roundNum)}</h5>
               <div className="bg-white rounded-md border border-blue-100 divide-y divide-blue-100">
                 {keyFixturesByRound[roundNum]
                   // Sort to prioritize matches involving our team first, then threat teams
@@ -177,7 +339,7 @@ export default function ClincherScenario({ scenario, teamName }) {
                     const involvesOurTeam = fixture.match.homeTeam === teamName || fixture.match.awayTeam === teamName;
                     
                     return (
-                      <div key={index} className={`px-3 py-2 sm:px-4 sm:py-3 ${involvesOurTeam ? 'bg-blue-50' : ''}`}>
+                      <div key={index} className="px-3 py-2 sm:px-4 sm:py-3">
                         <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center">
                           <div className="flex flex-col mb-2 sm:mb-0">
                             <div className="flex items-center">
@@ -231,62 +393,11 @@ export default function ClincherScenario({ scenario, teamName }) {
         </div>
       )}
       
-      {/* Add clinching day explanation */}
-      <div className="p-3 sm:p-4 bg-green-50 border border-green-200 rounded-md mb-4">
-        <h4 className="text-sm sm:text-md font-semibold text-green-800 mb-2">How {teamName} Can Clinch the Title</h4>
-        
-        <p className="text-xs sm:text-sm text-green-700 mb-3">
-          Assuming all prior matches go as shown above, {teamName} could clinch the title on matchday {round+1}
-          {matches && matches.length > 0 && matches[0]?.date 
-            ? (() => {
-                const lastMatchDate = new Date(matches[matches.length-1]?.date || matches[0]?.date);
-                const nextRoundDate = new Date(lastMatchDate);
-                nextRoundDate.setDate(nextRoundDate.getDate() + 7); // Assuming 1 week between rounds
-                return ` (${formatMatchDate(nextRoundDate).split(',')[0]})`;
-              })()
-            : ""} in one of these ways:
-        </p>
-        
-        {scenario.threatCompetitors && scenario.threatCompetitors.length > 0 && (
-          <div className="bg-white rounded-md border border-green-100 mb-3">
-            <div className="px-3 py-2 sm:px-4 sm:py-3 border-b border-green-100">
-              <p className="font-medium text-sm text-gray-800">Scenario 1:</p>
-              <p className="text-xs sm:text-sm text-gray-700">
-                If {scenario.threatCompetitors[0]} {scenario.threatCompetitors.length > 1 ? '(or other threats)' : ''} loses or draws their match, 
-                {teamName} will clinch the title regardless of their own result.
-              </p>
-            </div>
-            
-            <div className="px-3 py-2 sm:px-4 sm:py-3">
-              <p className="font-medium text-sm text-gray-800">Scenario 2:</p>
-              <p className="text-xs sm:text-sm text-gray-700">
-                If all title threats win their matches, {teamName} will need at least a draw in their own match to clinch.
-              </p>
-            </div>
-          </div>
-        )}
-        
-        <p className="text-xs text-gray-600">
-          This clinching scenario requires {teamName} to have built up a sufficient points advantage 
-          through the results of earlier fixtures shown above.
-        </p>
-      </div>
-      
-      {/* Add clarifying information */}
-      {scenario.threatCompetitors && scenario.threatCompetitors.length > 0 && (
-        <div className="p-2 sm:p-3 mb-3 bg-blue-50 border border-blue-100 rounded-md">
-          <p className="text-xs sm:text-sm text-blue-800">
-            <span className="font-semibold">Main title threat{scenario.threatCompetitors.length > 1 ? 's' : ''}:</span> {scenario.threatCompetitors.join(', ')}
-          </p>
-          <p className="text-xs text-blue-600 mt-1">
-            Only fixtures involving {teamName} and these teams are shown as they're most relevant to the title race.
-          </p>
+      {scenario.needsOneMoreResult && (
+        <div className="mt-3 text-xs text-blue-700 bg-blue-50 p-2 border border-blue-100 rounded">
+          <span className="font-semibold">Note:</span> This scenario assumes all earlier rounds play out optimally for {teamName}.
         </div>
       )}
-      
-      <p className="text-xs text-gray-500 mt-2">
-        Note: This scenario assumes all earlier rounds play out optimally for {teamName}.
-      </p>
     </div>
   );
 } 

@@ -53,6 +53,17 @@ class Match {
 }
 
 /**
+ * Format a date to be used as a round identifier (e.g., "April 13")
+ */
+function formatDateForRound(date) {
+  if (!date) return "unknown";
+  const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+  const month = months[date.getMonth()];
+  const day = date.getDate();
+  return `${month} ${day}`;
+}
+
+/**
  * Main class that handles the standings simulation
  */
 export class StandingsSimulator {
@@ -329,7 +340,27 @@ export class StandingsSimulator {
     
     // Group matches by round (still needed for round-based clinch checking)
     const matchesByRound = this.groupMatchesByRound();
-    const rounds = Object.keys(matchesByRound).sort((a, b) => parseInt(a) - parseInt(b));
+    const rounds = Object.keys(matchesByRound).sort((a, b) => {
+      // If using date-based rounds (Apr 14 format), sort chronologically
+      if (typeof a === 'string' && a.match(/[A-Za-z]+\s\d+/) && 
+          typeof b === 'string' && b.match(/[A-Za-z]+\s\d+/)) {
+        const monthsOrder = {
+          'Jan': 1, 'Feb': 2, 'Mar': 3, 'Apr': 4, 'May': 5, 'Jun': 6,
+          'Jul': 7, 'Aug': 8, 'Sep': 9, 'Oct': 10, 'Nov': 11, 'Dec': 12
+        };
+        
+        const [aMonth, aDay] = a.split(' ');
+        const [bMonth, bDay] = b.split(' ');
+        
+        if (monthsOrder[aMonth] !== monthsOrder[bMonth]) {
+          return monthsOrder[aMonth] - monthsOrder[bMonth];
+        }
+        return parseInt(aDay) - parseInt(bDay);
+      }
+      
+      // Default to numeric sorting for round numbers
+      return parseInt(a) - parseInt(b);
+    });
     
     if (rounds.length === 0) return null;
     
@@ -350,7 +381,7 @@ export class StandingsSimulator {
     // enough points to challenge for the title
     const threatCompetitors = [];
     
-    // First, find the top 2 teams by points (excluding our team)
+    // First, find the top teams by points (excluding our team)
     const sortedByPoints = [...this.teams]
       .filter(team => team.name !== teamName)
       .sort((a, b) => b.points - a.points);
@@ -358,7 +389,7 @@ export class StandingsSimulator {
     if (sortedByPoints.length === 0) {
       // No competitors at all - instant clinch
       return {
-        round: parseInt(rounds[0]),
+        round: rounds[0],
         pointsNeeded: targetTeam.points,
         currentPoints: targetTeam.points,
         pointsToGain: 0,
@@ -379,28 +410,56 @@ export class StandingsSimulator {
       const competitorRemaining = remainingMatchesByTeam[competitor.name];
       const maxPointsCompetitor = competitorPoints + (competitorRemaining * 3); // 3 points per win
       
-      // Only include Arsenal and true title contenders
-      // Usually just the second place team, or at most the top 2-3 teams
-      const isTopTeam = competitor.name === topCompetitor.name;
-      const isSecondTeam = sortedByPoints.length > 1 && competitor.name === sortedByPoints[1].name;
-      const isRealisticThreat = maxPointsCompetitor >= targetTeam.points && 
-                               (competitor.points >= targetTeam.points - 15) && 
-                               sortedByPoints.indexOf(competitor) < 2;
+      // Use stricter criteria to determine if a team is a true mathematical threat
+      const pointsGap = targetTeam.points - competitorPoints;
+      const targetTeamRemaining = remainingMatchesByTeam[teamName];
+      const targetTeamMaxPoints = targetTeam.points + (targetTeamRemaining * 3);
       
-      if (isTopTeam || isSecondTeam || isRealisticThreat) {
-        // Special case for Liverpool in Premier League 2023-24
-        // Only consider Arsenal as a true title threat based on current standings
-        if (teamName === "Liverpool") {
-          if (competitor.name === "Arsenal" || competitor.name === "Manchester City") {
-            threatCompetitors.push(competitor.name);
-            console.log(`True threat competitor: ${competitor.name} with ${competitor.points} points, max ${maxPointsCompetitor}`);
-          }
-        } else {
-          threatCompetitors.push(competitor.name);
-          console.log(`True threat competitor: ${competitor.name} with ${competitor.points} points, max ${maxPointsCompetitor}`);
-        }
+      // A team is a mathematical threat only if:
+      // 1. They can catch up to the target team's current points with their remaining games
+      // 2. Their maximum possible points are high enough to challenge
+      const canMathematicallyCatchUp = maxPointsCompetitor >= targetTeam.points;
+      
+      // If team cannot catch up even if they win all remaining games, they're not a threat
+      if (!canMathematicallyCatchUp) {
+        console.log(`${competitor.name} is not a threat - cannot mathematically catch up even with all wins`);
+        return;
+      }
+      
+      // Check if target team and competitor have enough remaining fixtures for competition
+      const isMeaningfulThreat = maxPointsCompetitor > targetTeam.points - (targetTeamRemaining * 3);
+      
+      // Check if they're close enough in points to be considered a realistic threat
+      // More points gap means they need to be higher in the table to be considered
+      let isRealisticThreat = false;
+      
+      if (pointsGap <= 3) {
+        // Any team within 3 points is always a threat
+        isRealisticThreat = true;
+      } else if (pointsGap <= 6) {
+        // Teams within 6 points must be in top 3
+        isRealisticThreat = sortedByPoints.indexOf(competitor) < 3;
+      } else if (pointsGap <= 9) {
+        // Teams within 9 points must be in top 2
+        isRealisticThreat = sortedByPoints.indexOf(competitor) < 2;
+      } else if (pointsGap <= 12) {
+        // Teams within 12 points must be the top team
+        isRealisticThreat = competitor.name === topCompetitor.name;
+      } else {
+        // More than 12 points behind, not realistic regardless of position
+        isRealisticThreat = false;
+      }
+      
+      if (canMathematicallyCatchUp && isMeaningfulThreat && isRealisticThreat) {
+        threatCompetitors.push(competitor.name);
+        console.log(`True threat competitor: ${competitor.name} with ${competitor.points} points, max ${maxPointsCompetitor}`);
       }
     });
+    
+    // Important: if no threats were found, add at least the top competitor
+    if (threatCompetitors.length === 0 && sortedByPoints.length > 0) {
+      threatCompetitors.push(sortedByPoints[0].name);
+    }
     
     // Step 2: Now iterate through rounds to find the earliest possible clinch scenario
     let simulatedTeams = this.teams.map(team => team.clone());
@@ -408,10 +467,49 @@ export class StandingsSimulator {
     let requiredResults = [];
     let keyFixturesForReturn = [];
     let pointsNeeded = targetTeam.points;
+    let roundForClinch = null;
+    
+    // Sort matches by date for better chronological analysis
+    const sortedMatches = [...this.remainingMatches].sort((a, b) => {
+      if (a.date && b.date) {
+        return new Date(a.date) - new Date(b.date);
+      } else if (a.date && !b.date) {
+        return -1; // Prioritize matches with dates
+      } else if (!a.date && b.date) {
+        return 1;
+      }
+      
+      // Fallback to round-based comparison if dates aren't available
+      if (a.roundInfo && b.roundInfo) {
+        return parseInt(a.roundInfo.round) - parseInt(b.roundInfo.round);
+      }
+      
+      return 0;
+    });
+    
+    // Group these sorted matches by opponent for the target team
+    const matchesByOpponent = {};
+    sortedMatches.forEach(match => {
+      if (match.homeTeam === teamName) {
+        if (!matchesByOpponent[match.awayTeam]) matchesByOpponent[match.awayTeam] = [];
+        matchesByOpponent[match.awayTeam].push(match);
+      } else if (match.awayTeam === teamName) {
+        if (!matchesByOpponent[match.homeTeam]) matchesByOpponent[match.homeTeam] = [];
+        matchesByOpponent[match.homeTeam].push(match);
+      }
+    });
+    
+    // Find the next round after each round
+    const nextRounds = {};
+    for (let i = 0; i < rounds.length - 1; i++) {
+      nextRounds[rounds[i]] = rounds[i + 1];
+    }
+    // Last round has no next round
+    nextRounds[rounds[rounds.length - 1]] = null;
     
     for (const round of rounds) {
       const roundMatches = matchesByRound[round];
-      const roundNumber = parseInt(round);
+      const roundDate = roundMatches[0]?.date ? new Date(roundMatches[0].date) : null;
       
       // Step 3: Simulate this round with best outcome for our team
       const teamsAfterRound = this.simulateRoundWithBestOutcomes(
@@ -424,10 +522,20 @@ export class StandingsSimulator {
       // Step 4: Recalculate remaining matches for each team after this round
       const remainingMatchesAfterRound = {};
       this.teams.forEach(team => {
-        remainingMatchesAfterRound[team.name] = this.remainingMatches.filter(
-          match => (match.homeTeam === team.name || match.awayTeam === team.name) &&
-                  (!match.roundInfo || parseInt(match.roundInfo.round) > roundNumber)
-        ).length;
+        // For date-based rounds, use the actual date for comparison
+        remainingMatchesAfterRound[team.name] = sortedMatches.filter(match => {
+          const matchInvolves = match.homeTeam === team.name || match.awayTeam === team.name;
+          
+          // If we have dates, use them for comparison
+          if (roundDate && match.date) {
+            const matchDate = new Date(match.date);
+            return matchInvolves && matchDate > roundDate;
+          }
+          
+          // Otherwise fall back to round-based comparison
+          const matchRound = match.roundInfo?.round ? match.roundInfo.round : null;
+          return matchInvolves && matchRound && matchRound > round;
+        }).length;
       });
       
       // Step 5: Check if clinch is possible after this round
@@ -446,12 +554,63 @@ export class StandingsSimulator {
         // If threat can still mathematically catch us, clinch is not possible yet
         if (maxThreatPoints >= ourPointsAfterRound) {
           clinchIsPossible = false;
+          console.log(`Clinch not possible in round ${round}: ${threatName} could reach ${maxThreatPoints} points vs our ${ourPointsAfterRound}`);
           break;
         }
       }
       
       if (clinchIsPossible) {
-        clinchFoundInRound = roundNumber;
+        clinchFoundInRound = round;
+        // Check if we need a separate clinching round or can clinch in this round
+        let canClinchInCurrentRound = false;
+        
+        // Check if clinching is possible in this round based on the points gap
+        const ourTeamAfterRound = teamsAfterRound.find(team => team.name === teamName);
+        const ourPointsAfterRound = ourTeamAfterRound.points;
+        
+        // For each threat, calculate if we have built up a sufficient gap
+        let sufficientGap = true;
+        let minGapNeeded = 0;
+        
+        for (const threatName of threatCompetitors) {
+          const threatTeamAfterRound = teamsAfterRound.find(team => team.name === threatName);
+          const threatPointsAfterRound = threatTeamAfterRound.points;
+          const threatRemainingMatches = remainingMatchesAfterRound[threatName] || 0;
+          const pointsGap = ourPointsAfterRound - threatPointsAfterRound;
+          
+          // Calculate how many points the threat could earn in their next match
+          // We need to be ahead by more than the threat can earn in their next match
+          const threatNextMatchPoints = threatRemainingMatches > 0 ? 3 : 0;
+          const gapNeededForThisThreat = threatNextMatchPoints + 1; // Need to be ahead by at least this amount
+          
+          minGapNeeded = Math.max(minGapNeeded, gapNeededForThisThreat);
+          
+          // If the gap is not sufficient for this threat, we cannot clinch in this round
+          if (pointsGap < gapNeededForThisThreat) {
+            console.log(`Gap with ${threatName} (${pointsGap} points) is not sufficient for clinching, need ${gapNeededForThisThreat}`);
+            sufficientGap = false;
+            break;
+          }
+        }
+        
+        if (sufficientGap) {
+          // Check if there's a match involving our team in this round
+          const teamMatchInRound = roundMatches.find(match => 
+            match.homeTeam === teamName || match.awayTeam === teamName
+          );
+          
+          if (teamMatchInRound) {
+            console.log(`Found match involving ${teamName} in round ${round} - sufficient points gap (${minGapNeeded}) exists for clinching`);
+            canClinchInCurrentRound = true;
+            roundForClinch = round; // Can clinch in the current round
+          }
+        }
+        
+        // If can't clinch in current round, clinch happens in the next round
+        if (!canClinchInCurrentRound) {
+          roundForClinch = nextRounds[round]; // The actual clinch would happen in the NEXT round
+        }
+        
         pointsNeeded = ourPointsAfterRound;
         
         // Generate required results for matches in this round
@@ -489,16 +648,25 @@ export class StandingsSimulator {
         // Collect key fixtures from earlier rounds but ONLY for our team and true threat competitors
         keyFixturesForReturn = [];
         
-        // Only include matches for actual title threats (like Arsenal), not all competitors
+        // Only include matches for actual title threats, not all competitors
         threatCompetitors.forEach(threatName => {
           // For each threat competitor, find their earlier fixtures
-          const threatFixtures = this.remainingMatches.filter(match => 
-            (match.homeTeam === threatName || match.awayTeam === threatName) &&
-            match.homeTeam !== teamName && match.awayTeam !== teamName && // Don't include matches vs our team, those are in requiredResults
-            (!match.roundInfo || parseInt(match.roundInfo.round) < roundNumber) 
-          );
+          const threatFixtures = sortedMatches.filter(match => {
+            const involvesThreat = match.homeTeam === threatName || match.awayTeam === threatName;
+            const notVsOurTeam = match.homeTeam !== teamName && match.awayTeam !== teamName;
+            
+            // Check if match is before current round
+            if (roundDate && match.date) {
+              const matchDate = new Date(match.date);
+              return involvesThreat && notVsOurTeam && matchDate < roundDate;
+            }
+            
+            // Fallback to round-based check
+            return involvesThreat && notVsOurTeam && 
+                   match.roundInfo && match.roundInfo.round < round;
+          });
           
-          // Sort by date/round and take up to 2 fixtures per threat
+          // Sort by date/round and take up to 3 fixtures per threat
           const sortedFixtures = [...threatFixtures].sort((a, b) => {
             if (a.date && b.date) {
               return new Date(a.date) - new Date(b.date);
@@ -518,17 +686,26 @@ export class StandingsSimulator {
               match,
               result: isHome ? 'away_win_or_draw' : 'home_win_or_draw',
               explanation: `${threatName} dropping points would help ${teamName} gain ground`,
-              round: match.roundInfo ? parseInt(match.roundInfo.round) : 0,
+              round: match.roundInfo ? match.roundInfo.round : 
+                     match.date ? formatDateForRound(new Date(match.date)) : "unknown",
               importance: 'high'
             });
           });
         });
         
         // Also include our team's matches from earlier rounds - we always want to win these
-        const ourFixtures = this.remainingMatches.filter(match => 
-          (match.homeTeam === teamName || match.awayTeam === teamName) &&
-          (!match.roundInfo || parseInt(match.roundInfo.round) < roundNumber)
-        );
+        const ourFixtures = sortedMatches.filter(match => {
+          const involvesUs = match.homeTeam === teamName || match.awayTeam === teamName;
+          
+          // Check if match is before current round
+          if (roundDate && match.date) {
+            const matchDate = new Date(match.date);
+            return involvesUs && matchDate < roundDate;
+          }
+          
+          // Fallback to round-based check
+          return involvesUs && match.roundInfo && match.roundInfo.round < round;
+        });
         
         const sortedOurFixtures = [...ourFixtures].sort((a, b) => {
           if (a.date && b.date) {
@@ -549,7 +726,8 @@ export class StandingsSimulator {
             match,
             result: isHome ? 'home_win' : 'away_win',
             explanation: `${teamName} must win to maintain progress toward clinching`,
-            round: match.roundInfo ? parseInt(match.roundInfo.round) : 0,
+            round: match.roundInfo ? match.roundInfo.round : 
+                   match.date ? formatDateForRound(new Date(match.date)) : "unknown",
             importance: 'high'
           });
         });
@@ -566,6 +744,7 @@ export class StandingsSimulator {
           }
         });
         
+        keyFixturesForReturn = uniqueFixtures;
         break; // We found the earliest clinch, no need to continue
       }
       
@@ -574,15 +753,20 @@ export class StandingsSimulator {
     }
     
     if (clinchFoundInRound) {
+      // Get the next round after the setup round for actual clinching
+      const clinchingRound = roundForClinch || clinchFoundInRound;
+      
       return {
         round: clinchFoundInRound,
+        clinchingRound: clinchingRound, // The round where they actually clinch
         pointsNeeded: pointsNeeded,
         currentPoints: targetTeam.points,
         pointsToGain: pointsNeeded - targetTeam.points,
         requiredResults: requiredResults,
         matches: matchesByRound[clinchFoundInRound],
         keyFixtures: keyFixturesForReturn,
-        threatCompetitors: threatCompetitors
+        threatCompetitors: threatCompetitors,
+        canClinchInCurrentRound: clinchFoundInRound === clinchingRound
       };
     }
     
@@ -644,14 +828,35 @@ export class StandingsSimulator {
     const matchesByRound = {};
     
     this.remainingMatches.forEach(match => {
-      // If roundInfo is missing, use a default placeholder
-      const round = match.roundInfo ? match.roundInfo.round : 'unknown';
-      
-      if (!matchesByRound[round]) {
-        matchesByRound[round] = [];
+      // If using date objects, create round identifier based on date format
+      if (match.date) {
+        const date = new Date(match.date);
+        const roundId = formatDateForRound(date);
+        
+        if (!matchesByRound[roundId]) {
+          matchesByRound[roundId] = [];
+        }
+        
+        matchesByRound[roundId].push(match);
+      } 
+      // Fallback to roundInfo if date isn't available
+      else if (match.roundInfo) {
+        const round = match.roundInfo.round;
+        
+        if (!matchesByRound[round]) {
+          matchesByRound[round] = [];
+        }
+        
+        matchesByRound[round].push(match);
       }
-      
-      matchesByRound[round].push(match);
+      // Last resort - use unknown
+      else {
+        if (!matchesByRound['unknown']) {
+          matchesByRound['unknown'] = [];
+        }
+        
+        matchesByRound['unknown'].push(match);
+      }
     });
     
     return matchesByRound;
